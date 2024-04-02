@@ -1,3 +1,7 @@
+mod analyser;
+use analyser::Analyser;
+use std::collections::HashMap;
+
 fn main() {
-    println!("RUST PROJ WAS CREATED");
+    let analyser = Analyser{};
 }
