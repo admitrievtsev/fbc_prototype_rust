@@ -1,5 +1,5 @@
 use std::vec::Vec;
-use std::fs;
+use std::{fs, vec};
 use std::string::String;
 use std::collections::LinkedList;
 
@@ -9,6 +9,11 @@ macro_rules! mx_csize {
     );
 }
 
+macro_rules! fixed_chunker_size {
+    () => (
+        128
+    );
+}
 macro_rules! mn_csize {
     () => (
         7
@@ -26,7 +31,7 @@ pub struct Analyser<'anl_lt> {
     f_out: &'anl_lt str,
     dict: Vec<DictRecord<>>,
     cid_list : LinkedList<i32>,
-    chunk_list : LinkedList<vec![]>,
+    chunk_list : LinkedList<Vec<[char; fixed_chunker_size!()]>>,
 }
 impl<'anl_lt> Analyser<'anl_lt>{
     pub fn new(file_in: &'anl_lt str, file_out: &'anl_lt str) -> Option<Analyser<'anl_lt>> {
@@ -129,16 +134,17 @@ impl<'anl_lt> Analyser<'anl_lt>{
     }
     pub fn deduplication(&mut self){
         self.make_dict();
-        self.simple_dedup(128);
-
+        self.simple_dedup(fixed_chunker_size!());
         //Ищем чанки из dict, проводим дедупликацию, возвращаем массив id и массив чанков
         //Запись в f_out
     }
-    fn simple_dedup(&self, fix_csize: i32){
-        let mut contents = fs::read_to_string(self.f_in).expect("Should have been able to read the file").as_str();
-        for i in 0 .. (contents.len() / fix_csize).floor() - 1{
+    fn simple_dedup(&mut self, fix_csize: i32){
+        let binding = fs::read_to_string(self.f_in).expect("Should have been able to read the file");
+        let mut contents = binding.as_str();
+        let mut i = 0;
+        while (i * fixed_chunker_size!()) < contents.len(){
             //self.chunk_list.push(contents[i * 128 .. (i + 1) * 128]);
-            self.cid_list.push(i);
+            self.cid_list.push_back(i as i32);
         }
     }
 }
