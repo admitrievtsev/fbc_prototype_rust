@@ -4,12 +4,12 @@ use std::string::String;
 
 macro_rules! mx_csize {
     () => (
-        20
+        24
     );
 }
 macro_rules! mn_csize {
     () => (
-        9
+        7
     );
 }
 
@@ -31,7 +31,7 @@ impl<'anl_lt> Analyser<'anl_lt>{
     fn make_dict(&mut self){
         let contents = fs::read_to_string(self.f_in)
             .expect("Should have been able to read the file");
-        const K: usize = 14000;
+        const K: usize = 16000;
         let mut char_ar : [char; K] = ['a'; K];
         for i in 0..K{
             char_ar[i] = contents.as_bytes()[i] as char;
@@ -43,11 +43,13 @@ impl<'anl_lt> Analyser<'anl_lt>{
             }
         }
         for i in 1 .. K - mx_csize!() {
+            if i % 6000 == 0{
+                self.reset_unfrequent_chunks();
+            }
             for j in mn_csize!() .. mx_csize!() {
                 for w in 1 .. j + 1 {
                     tmparr[j - mn_csize!()][w - 1] = tmparr[j - mn_csize!()][w]
                 }
-
                 tmparr[j - mn_csize!()][j] = char_ar[i + j];
                 self.contains_chunk(tmparr[j - mn_csize!()], j + 1);
             }
@@ -55,11 +57,29 @@ impl<'anl_lt> Analyser<'anl_lt>{
                 println!("{}", i)
             }
         }
+        self.reset_unfrequent_chunks();
         let k = self.dict.iter();
         for i in k{
-            if i.num > 5 {
+            if i.num > 8 {
                 println!("{:?} {} {}", Analyser::<'anl_lt>::tostr(i.chunk, i.size), i.num, i.size)
             }
+        }
+    }
+    fn reset_unfrequent_chunks(&mut self){
+        let mut g = self.dict.len() - 1;
+        let mut k = 0;
+
+        loop {
+            k += 1;
+            if k % 1000 == 0 {
+                println!("RESET LIST: {}", k);
+            }
+            if self.dict[g].num == 1 {
+                self.dict.remove(g);
+            }
+            if g > 0 {
+                g -= 1
+            } else { break }
         }
     }
     fn tostr(word: [char; mx_csize!()], i1: usize) -> String{
@@ -87,7 +107,6 @@ impl<'anl_lt> Analyser<'anl_lt>{
                         break
                     }
                 }
-
                 if fg {
                     self.dict[g].num += 1;
                     return
