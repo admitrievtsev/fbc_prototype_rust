@@ -1,12 +1,14 @@
 use std::vec::Vec;
 use std::fs;
 use std::string::String;
+use std::collections::LinkedList;
 
 macro_rules! mx_csize {
     () => (
         24
     );
 }
+
 macro_rules! mn_csize {
     () => (
         7
@@ -23,10 +25,12 @@ pub struct Analyser<'anl_lt> {
     f_in: &'anl_lt str,
     f_out: &'anl_lt str,
     dict: Vec<DictRecord<>>,
+    cid_list : LinkedList<i32>,
+    chunk_list : LinkedList<vec![]>,
 }
 impl<'anl_lt> Analyser<'anl_lt>{
     pub fn new(file_in: &'anl_lt str, file_out: &'anl_lt str) -> Option<Analyser<'anl_lt>> {
-        Some(Analyser{f_in: file_in, f_out: file_out, dict: vec![]})
+        Some(Analyser{f_in: file_in, f_out: file_out, dict: vec![], cid_list: LinkedList::new(), chunk_list: LinkedList::new()})
     }
     fn make_dict(&mut self){
         let contents = fs::read_to_string(self.f_in)
@@ -43,8 +47,8 @@ impl<'anl_lt> Analyser<'anl_lt>{
             }
         }
         for i in 1 .. K - mx_csize!() {
-            if i % 6000 == 0{
-                self.reset_unfrequent_chunks();
+            if i % 5000 == 0{
+                self.reset_unfrequent_chunks(1);
             }
             for j in mn_csize!() .. mx_csize!() {
                 for w in 1 .. j + 1 {
@@ -57,15 +61,18 @@ impl<'anl_lt> Analyser<'anl_lt>{
                 println!("{}", i)
             }
         }
-        self.reset_unfrequent_chunks();
+        self.reset_unfrequent_chunks(1);
         let k = self.dict.iter();
+        let mut y = 0;
         for i in k{
-            if i.num > 8 {
+            if i.num > 1 {
+                y += 1;
                 println!("{:?} {} {}", Analyser::<'anl_lt>::tostr(i.chunk, i.size), i.num, i.size)
             }
         }
+        println!("{} {}", self.dict.len(), y);
     }
-    fn reset_unfrequent_chunks(&mut self){
+    fn reset_unfrequent_chunks(&mut self, lower_edge: i32){
         let mut g = self.dict.len() - 1;
         let mut k = 0;
 
@@ -74,12 +81,15 @@ impl<'anl_lt> Analyser<'anl_lt>{
             if k % 1000 == 0 {
                 println!("RESET LIST: {}", k);
             }
-            if self.dict[g].num == 1 {
+            if self.dict[g].num <= lower_edge {
                 self.dict.remove(g);
             }
             if g > 0 {
                 g -= 1
-            } else { break }
+            }
+            else {
+                break
+            }
         }
     }
     fn tostr(word: [char; mx_csize!()], i1: usize) -> String{
@@ -119,8 +129,17 @@ impl<'anl_lt> Analyser<'anl_lt>{
     }
     pub fn deduplication(&mut self){
         self.make_dict();
+        self.simple_dedup(128);
+
         //Ищем чанки из dict, проводим дедупликацию, возвращаем массив id и массив чанков
         //Запись в f_out
+    }
+    fn simple_dedup(&self, fix_csize: i32){
+        let mut contents = fs::read_to_string(self.f_in).expect("Should have been able to read the file").as_str();
+        for i in 0 .. (contents.len() / fix_csize).floor() - 1{
+            //self.chunk_list.push(contents[i * 128 .. (i + 1) * 128]);
+            self.cid_list.push(i);
+        }
     }
 }
 
