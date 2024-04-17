@@ -51,12 +51,8 @@ impl Analyser {
         }
     }
 
-    fn tostr(word: &Vec<char>) -> String {
-        let mut temp_str = String::new();
-        for char in word.iter() {
-            temp_str.push(*char);
-        }
-        temp_str
+    fn to_str(word: &[char]) -> String {
+        word.iter().collect()
     }
 
     fn add_chunk(&mut self, chunk: Vec<char>, str_size: usize) {
