@@ -11,12 +11,15 @@ macro_rules! inc {
         $x += 1
     };
 }
+
+#[derive(Default)]
 struct DictRecord {
     chunk: Vec<char>,
     num: i32,
     size: usize,
 }
 
+#[derive(Default)]
 pub struct Analyser {
     dict: Vec<DictRecord>,  // hashmap? chunk_map
     chunk_ids: Vec<usize>,  // hashset?
@@ -24,14 +27,6 @@ pub struct Analyser {
 }
 
 impl Analyser {
-    pub fn new() -> Analyser {
-        Analyser {
-            dict: vec![],
-            chunk_ids: vec![],
-            chunks: vec![],
-        }
-    }
-
     fn make_dict(&mut self, chars: Vec<char>) {
         let mut temp_chunks: Vec<Vec<char>> = vec![vec![]; MX_CSIZE - MN_CSIZE];
         for slice_index in MN_CSIZE..MX_CSIZE {
@@ -46,7 +41,7 @@ impl Analyser {
                         temp_chunks[chunk_size - MN_CSIZE][char_index]
                 }
                 temp_chunks[chunk_size - MN_CSIZE][chunk_size] = chars[start_index + chunk_size];
-                self.add_chunk(temp_chunks[chunk_size - MN_CSIZE].clone(), chunk_size + 1);
+                self.add_chunk(temp_chunks[chunk_size - MN_CSIZE].clone());
             }
         }
     }
@@ -55,11 +50,12 @@ impl Analyser {
         word.iter().collect()
     }
 
-    fn add_chunk(&mut self, chunk: Vec<char>, str_size: usize) {
+    fn add_chunk(&mut self, chunk: Vec<char>) {
+        let str_size = chunk.len();
         let mut chunk_dict_id = 0;
         for dict_chunk in self.dict.iter() {
             if dict_chunk.size == str_size {
-                for char_index in 0..str_size + 1 {
+                for char_index in 0..str_size {
                     if char_index == str_size {
                         inc!(self.dict[chunk_dict_id].num);
                         return;
@@ -87,7 +83,7 @@ impl Analyser {
     fn reduplicate(&self, file_out: &str) {
         let mut string_out = String::new();
         for id in self.chunk_ids.iter() {
-            string_out.push_str(&*Self::tostr(&self.chunks[*id]));
+            string_out.push_str(&Self::tostr(&self.chunks[*id]));
         }
         fs::write(file_out, string_out).expect("Unable to write the file");
     }
@@ -155,7 +151,7 @@ impl Analyser {
         }
     }
     fn replace_all_two(&mut self, to_change: usize, first: usize, second: usize) {
-        let mut temp_vec: Vec<usize> = vec![];
+        let mut temp_vec: Vec<usize> = Vec::with_capacity(self.chunks.len() + 1);
         for index in 0..self.chunk_ids.len() {
             if self.chunk_ids[index] == to_change {
                 temp_vec.push(first);
@@ -188,10 +184,7 @@ impl Analyser {
     fn simple_dedup(&mut self, f_in: &str) {
         let contents = fs::read_to_string(f_in).expect("Should have been able to read the file");
         let input_length = contents.len();
-        let mut chars: Vec<char> = vec![' '; input_length];
-        for index in 0..input_length {
-            chars[index] = contents.as_bytes()[index] as char;
-        }
+        let chars: Vec<char> = contents.chars().collect();
         let mut chunk_num = 0;
         for index_input in 0..input_length {
             if index_input % FIXED_CHUNKER_SIZE == 0 {
@@ -201,8 +194,8 @@ impl Analyser {
             }
             self.chunks[chunk_num - 1].push(chars[index_input]);
         }
-        for chunk_index in 0..self.chunks.len() {
-            self.make_dict(self.chunks[chunk_index].clone());
+        for chunk_index in 0..self.chunks.len() { //dict
+            self.make_dict((self.chunks[chunk_index]).clone());
         }
         self.dict = self.dict.drain(..).filter(|x| x.num > 1).collect();
     }

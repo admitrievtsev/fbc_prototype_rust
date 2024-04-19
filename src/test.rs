@@ -2,6 +2,7 @@
 mod tests {
     use crate::analyser::Analyser;
     use std::fs;
+
     #[test]
     fn fbc_topic_test() {
         let mut analyser = Analyser::new();
@@ -12,6 +13,7 @@ mod tests {
         let actual = fs::read_to_string(file_out).expect("Should have been able to read the file");
         assert_eq!(expected, actual);
     }
+
     #[test]
     fn fbc_orient_express() {
         let mut analyser = Analyser::new();
