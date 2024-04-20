@@ -1,162 +1,215 @@
-use std::vec::Vec;
-use std::{fs, vec};
+use std::fs;
 use std::string::String;
-use std::collections::LinkedList;
+use std::vec::Vec;
 
-macro_rules! mx_csize {
-    () => (
-        24
-    );
+const MAX_CHUNK_SIZE: usize = 24;
+const FIXED_CHUNKER_SIZE: usize = 128;
+const MIN_CHUNK_SIZE: usize = 7;
+
+macro_rules! inc {
+    ($x:expr) => {
+        $x += 1
+    };
 }
 
-macro_rules! fixed_chunker_size {
-    () => (
-        128
-    );
-}
-macro_rules! mn_csize {
-    () => (
-        7
-    );
-}
+type Chunk = Vec<char>;
 
-struct DictRecord<> {
-    chunk: [char; mx_csize!()],
-    num: i32,
+#[derive(Default)]
+struct DictRecord {
+    chunk: Chunk,
+    occurrence_num: u32,
     size: usize,
 }
 
-pub struct Analyser<'anl_lt> {
-    f_in: &'anl_lt str,
-    f_out: &'anl_lt str,
-    dict: Vec<DictRecord<>>,
-    cid_list : Vec<i32>,
-    chunk_list : Vec<Vec<char>>,
+#[derive(Default)]
+pub struct Analyser {
+    dict: Vec<DictRecord>, // hashmap? chunk_map
+    chunk_ids: Vec<usize>, // hashset?
+    chunks: Vec<Chunk>,    // u8 instead
 }
-impl<'anl_lt> Analyser<'anl_lt>{
-    pub fn new(file_in: &'anl_lt str, file_out: &'anl_lt str) -> Option<Analyser<'anl_lt>> {
-        Some(Analyser{f_in: file_in, f_out: file_out, dict: vec![], cid_list: vec![], chunk_list: vec![]})
-    }
-    fn make_dict(&mut self, char_ar: Vec<char>){
-        let K: usize = char_ar.len();
-        let mut tmparr: [[char; mx_csize!()]; mx_csize!() - mn_csize!()] = [[' '; mx_csize!()]; mx_csize!() - mn_csize!()];
-        for i in mn_csize!() .. mx_csize!(){
-            for j in 0 .. i + 1{
-                tmparr[i - mn_csize!()][j] = char_ar[j]
+
+impl Analyser {
+    fn make_dict(&mut self, first_stage_chunk: Chunk) {
+        //rewrite with return dictionary
+        let mut temp_chunks: Vec<Chunk> = vec![vec![]; MAX_CHUNK_SIZE - MIN_CHUNK_SIZE];
+        for slice_index in MIN_CHUNK_SIZE..MAX_CHUNK_SIZE {
+            for char in first_stage_chunk.iter().take(slice_index + 1) {
+                temp_chunks[slice_index - MIN_CHUNK_SIZE].push(*char);
             }
         }
-        for i in 1 .. K - mx_csize!() {
-            for j in mn_csize!() .. mx_csize!() {
-                for w in 1 .. j + 1 {
-                    tmparr[j - mn_csize!()][w - 1] = tmparr[j - mn_csize!()][w]
+
+        for start_index in 1..first_stage_chunk.len() - MAX_CHUNK_SIZE {
+            for chunk_size in MIN_CHUNK_SIZE..MAX_CHUNK_SIZE {
+                for char_index in 1..chunk_size + 1 {
+                    temp_chunks[chunk_size - MIN_CHUNK_SIZE][char_index - 1] =
+                        temp_chunks[chunk_size - MIN_CHUNK_SIZE][char_index]
                 }
-                tmparr[j - mn_csize!()][j] = char_ar[i + j];
-                self.contains_chunk(tmparr[j - mn_csize!()], j + 1);
+                temp_chunks[chunk_size - MIN_CHUNK_SIZE][chunk_size] =
+                    first_stage_chunk[start_index + chunk_size];
+                self.add_chunk(temp_chunks[chunk_size - MIN_CHUNK_SIZE].clone());
             }
         }
-        //self.reset_unfrequent_chunks(1);
-    }
-    fn reset_unfrequent_chunks(&mut self, lower_edge: i32){
-        if self.dict.len() == 0 {return}
-        let mut g = self.dict.len() - 1;
-        let mut k = 0;
-        loop {
-            k += 1;
-            if k % 1000 == 0 {
-                println!("RESET LIST: {}", k);
-            }
-            if self.dict[g].num <= lower_edge {
-                self.dict.remove(g);
-            }
-            if g > 0 {
-                g -= 1
-            }
-            else {
-                break
-            }
-        }
-    }
-    fn tostr(word: [char; mx_csize!()], i1: usize) -> String{
-        let mut x = String::new();
-        for i in 0..i1{
-            x.push(word[i]);
-        }
-        return x;
     }
 
-    fn contains_chunk(&mut self, st: [char; mx_csize!()], ar_size: usize){
-        let k = self.dict.iter();
-        let mut g = 0;
-        for mut i in k{
-            if i.size == ar_size{
-                let mut fg = true;
-                for j in 0 .. ar_size{
-                    if i.chunk[j] != st[j] {
-                        fg = false;
-                        /*
-                        if (Analyser::<'anl_lt>::tostr(st, i.size) == "Minnesota") {
-                            //println!("ARG: {} DICT: {}", Analyser::<'anl_lt>::tostr(st, i.size), Analyser::<'anl_lt>::tostr(i.chunk, i.size));
-                            //println!("DIFF: {} != {}", i.chunk[j], st[j]);
-                        }
-                         */
-                        break
+    fn tostr(word: &[char]) -> String {
+        word.iter().collect()
+    }
+
+    fn add_chunk(&mut self, chunk: Chunk) {
+        let str_size = chunk.len();
+        let mut chunk_dict_id = 0;
+        for dict_chunk in self.dict.iter() {
+            if dict_chunk.size == str_size {
+                for char_index in 0..str_size {
+                    if char_index == str_size {
+                        inc!(self.dict[chunk_dict_id].occurrence_num);
+                        return;
+                    }
+                    if dict_chunk.chunk[char_index] != chunk[char_index] {
+                        break;
                     }
                 }
-                if fg {
-                    self.dict[g].num += 1;
-                    return
+            }
+            inc!(chunk_dict_id);
+        }
+        self.dict.push(DictRecord {
+            chunk,
+            occurrence_num: 1,
+            size: str_size,
+        })
+    }
+
+    pub fn deduplicate(&mut self, file_in: &str, file_out: &str) {
+        self.simple_dedup(file_in);
+        self.throw_chunks_to_maker();
+        self.fbc_dedup();
+        self.reduplicate(file_out);
+    }
+
+    fn reduplicate(&self, file_out: &str) {
+        let mut string_out = String::new();
+        for id in self.chunk_ids.iter() {
+            string_out.push_str(&Self::tostr(&self.chunks[*id]));
+        }
+        fs::write(file_out, string_out).expect("Unable to write the file");
+    }
+
+    fn fbc_dedup(&mut self) {
+        for dict_index in 0..self.dict.len() {
+            for chunk_index in 0..self.chunks.len() {
+                if self.dict[dict_index].chunk.len() < self.chunks[chunk_index].len() {
+                    for chunk_char in
+                        0..self.chunks[chunk_index].len() - self.dict[dict_index].chunk.len()
+                    {
+                        let mut is_chunk_correct = true;
+                        for char_index in 0..self.dict[dict_index].chunk.len() {
+                            if self.dict[dict_index].chunk[char_index]
+                                != self.chunks[chunk_index][chunk_char + char_index]
+                            {
+                                is_chunk_correct = false;
+                                break;
+                            }
+                        }
+
+                        if is_chunk_correct {
+                            let mut is_found = false;
+                            let mut cut_out = self.chunks.len();
+
+                            for chunk_index in 0..self.chunks.len() {
+                                if self.chunks[chunk_index] == self.dict[dict_index].chunk {
+                                    is_found = true;
+                                    cut_out = chunk_index;
+                                    break;
+                                }
+                            }
+                            if chunk_char == 0 {
+                                if !is_found {
+                                    self.chunks.push(self.dict[dict_index].chunk.clone());
+                                }
+                                self.chunks[chunk_index] =
+                                    self.chunks[chunk_index][self.dict[dict_index].chunk.len()
+                                        ..self.chunks[chunk_index].len()]
+                                        .to_owned();
+                                self.replace_all_two(chunk_index, cut_out, chunk_index);
+                            } else {
+                                if !is_found {
+                                    self.chunks.push(self.dict[dict_index].chunk.clone());
+                                }
+                                self.chunks.push(
+                                    self.chunks[chunk_index]
+                                        [self.dict[dict_index].size + chunk_char..self.chunks[chunk_index].len()]
+                                        .to_owned(),
+                                );
+                                self.chunks[chunk_index] =
+                                    self.chunks[chunk_index][0..chunk_char].to_owned();
+                                self.replace_all_three(
+                                    chunk_index,
+                                    chunk_index,
+                                    cut_out,
+                                    self.chunks.len() - 1,
+                                );
+                            }
+                            break;
+                        }
+                    }
                 }
             }
-            g += 1;
         }
-        self.dict.push(DictRecord{chunk: st, num: 1, size: ar_size});
-        return
     }
-    pub fn deduplication(&mut self){
-        self.simple_dedup(fixed_chunker_size!());
-        self.fbc_dedup();
-        //Ищем чанки из dict, проводим дедупликацию, возвращаем массив id и массив чанков
-        //Запись в f_out
+    fn replace_all_two(&mut self, to_change: usize, first: usize, second: usize) {
+        let mut temp_vec: Vec<usize> = Vec::with_capacity(self.chunks.len() + 1);
+        for index in 0..self.chunk_ids.len() {
+            if self.chunk_ids[index] == to_change {
+                temp_vec.push(first);
+                temp_vec.push(second);
+            } else {
+                temp_vec.push(self.chunk_ids[index]);
+            }
+        }
+        self.chunk_ids = temp_vec
     }
-    fn fbc_dedup(&mut self){
 
-    }
-    fn simple_dedup(&mut self, fix_csize: i32){
-        let contents = fs::read_to_string(self.f_in)
-            .expect("Should have been able to read the file");
-        let K = contents.len();
-        let mut char_ar : Vec<char> = vec![' '; K];
-        for i in 0..K{
-            char_ar[i] = contents.as_bytes()[i] as char;
+    fn replace_all_three(&mut self, to_change: usize, first: usize, second: usize, third: usize) {
+        let mut temp_vec: Vec<usize> = vec![];
+        for index in 0..self.chunk_ids.len() {
+            if self.chunk_ids[index] == to_change {
+                temp_vec.push(first);
+                temp_vec.push(second);
+                temp_vec.push(third);
+            } else {
+                temp_vec.push(self.chunk_ids[index]);
+            }
         }
-        let mut i = 0;
+        self.chunk_ids = temp_vec
+    }
+    #[warn(dead_code)]
+    fn dict_count_size(&self) -> usize {
+        return self.chunks.iter().fold(0, |acc, x| acc + x.len());
+    }
+
+    fn simple_dedup(&mut self, f_in: &str) {
+        let contents = fs::read_to_string(f_in).expect("Should have been able to read the file");
+        let input_length = contents.len();
+        let chars: Chunk = contents.chars().collect();
         let mut chunk_num = 0;
-        while i < K{
-            if i % 128 == 0{
-                chunk_num += 1;
-                self.chunk_list.push(vec![]);
-                self.cid_list.push((chunk_num - 1) as i32);
+        for index_input in 0..input_length {
+            if index_input % FIXED_CHUNKER_SIZE == 0 {
+                inc!(chunk_num);
+                self.chunks.push(vec![]);
+                self.chunk_ids.push(chunk_num - 1);
             }
-            if chunk_num % 20 == 0{
-                self.reset_unfrequent_chunks(2);
-            }
-            self.chunk_list[chunk_num - 1].push(char_ar[i]);
-            i += 1;
+            self.chunks[chunk_num - 1].push(chars[index_input]);
         }
-        for i in 0 .. self.chunk_list.len(){
-            self.make_dict(self.chunk_list[i].clone());
-            println!("CHUNK NO {}",  i)
-        }
+    }
 
-        let k = self.dict.iter();
-        let mut y = 0;
-        for i in k{
-            if i.num > 1 {
-                y += 1;
-                println!("{:?} {} {}", Analyser::<'anl_lt>::tostr(i.chunk, i.size), i.num, i.size)
-            }
+    fn throw_chunks_to_maker(&mut self) {
+        for chunk_index in 0..self.chunks.len() {
+            self.make_dict((self.chunks[chunk_index]).clone());
         }
-        println!("{} {}", self.dict.len(), y);
+        self.dict = self
+            .dict
+            .drain(..)
+            .filter(|x| x.occurrence_num > 1)
+            .collect();
     }
 }
-
