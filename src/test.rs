@@ -5,7 +5,7 @@ mod tests {
 
     #[test]
     fn fbc_topic_test() {
-        let mut analyser = Analyser::new();
+        let mut analyser = Analyser::default();
         let file_in = "test_files_input/fbc_topic_input.txt";
         let file_out = "test_files_output/fbc_topic_output.txt";
         analyser.deduplicate(file_in, file_out);
@@ -16,7 +16,7 @@ mod tests {
 
     #[test]
     fn fbc_orient_express() {
-        let mut analyser = Analyser::new();
+        let mut analyser = Analyser::default();
         let file_in = "test_files_input/orient_express_input.txt";
         let file_out = "test_files_output/orient_express_output.txt";
         analyser.deduplicate(file_in, file_out);
