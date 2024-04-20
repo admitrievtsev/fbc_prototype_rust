@@ -2,9 +2,9 @@ use std::fs;
 use std::string::String;
 use std::vec::Vec;
 
-const MX_CSIZE: usize = 24;
+const MAX_CHUNK_SIZE: usize = 24;
 const FIXED_CHUNKER_SIZE: usize = 128;
-const MN_CSIZE: usize = 7;
+const MIN_CHUNK_SIZE: usize = 7;
 
 macro_rules! inc {
     ($x:expr) => {
@@ -12,52 +12,57 @@ macro_rules! inc {
     };
 }
 
+type Chunk = Vec<char>;
+
 #[derive(Default)]
 struct DictRecord {
-    chunk: Vec<char>,
-    num: i32,
+    chunk: Chunk,
+    occurrence_num: u32,
     size: usize,
 }
 
 #[derive(Default)]
 pub struct Analyser {
-    dict: Vec<DictRecord>,  // hashmap? chunk_map
-    chunk_ids: Vec<usize>,  // hashset?
-    chunks: Vec<Vec<char>>, // u8 instead
+    dict: Vec<DictRecord>, // hashmap? chunk_map
+    chunk_ids: Vec<usize>, // hashset?
+    chunks: Vec<Chunk>,    // u8 instead
 }
 
 impl Analyser {
-    fn make_dict(&mut self, chars: Vec<char>) {
-        let mut temp_chunks: Vec<Vec<char>> = vec![vec![]; MX_CSIZE - MN_CSIZE];
-        for slice_index in MN_CSIZE..MX_CSIZE {
-            for char in chars.iter().take(slice_index + 1) {
-                temp_chunks[slice_index - MN_CSIZE].push(*char);
+    fn make_dict(&mut self, first_stage_chunk: Chunk) {
+        //rewrite with return dictionary
+        let mut temp_chunks: Vec<Chunk> = vec![vec![]; MAX_CHUNK_SIZE - MIN_CHUNK_SIZE];
+        for slice_index in MIN_CHUNK_SIZE..MAX_CHUNK_SIZE {
+            for char in first_stage_chunk.iter().take(slice_index + 1) {
+                temp_chunks[slice_index - MIN_CHUNK_SIZE].push(*char);
             }
         }
-        for start_index in 1..chars.len() - MX_CSIZE {
-            for chunk_size in MN_CSIZE..MX_CSIZE {
+
+        for start_index in 1..first_stage_chunk.len() - MAX_CHUNK_SIZE {
+            for chunk_size in MIN_CHUNK_SIZE..MAX_CHUNK_SIZE {
                 for char_index in 1..chunk_size + 1 {
-                    temp_chunks[chunk_size - MN_CSIZE][char_index - 1] =
-                        temp_chunks[chunk_size - MN_CSIZE][char_index]
+                    temp_chunks[chunk_size - MIN_CHUNK_SIZE][char_index - 1] =
+                        temp_chunks[chunk_size - MIN_CHUNK_SIZE][char_index]
                 }
-                temp_chunks[chunk_size - MN_CSIZE][chunk_size] = chars[start_index + chunk_size];
-                self.add_chunk(temp_chunks[chunk_size - MN_CSIZE].clone());
+                temp_chunks[chunk_size - MIN_CHUNK_SIZE][chunk_size] =
+                    first_stage_chunk[start_index + chunk_size];
+                self.add_chunk(temp_chunks[chunk_size - MIN_CHUNK_SIZE].clone());
             }
         }
     }
 
-    fn to_str(word: &[char]) -> String {
+    fn tostr(word: &[char]) -> String {
         word.iter().collect()
     }
 
-    fn add_chunk(&mut self, chunk: Vec<char>) {
+    fn add_chunk(&mut self, chunk: Chunk) {
         let str_size = chunk.len();
         let mut chunk_dict_id = 0;
         for dict_chunk in self.dict.iter() {
             if dict_chunk.size == str_size {
                 for char_index in 0..str_size {
                     if char_index == str_size {
-                        inc!(self.dict[chunk_dict_id].num);
+                        inc!(self.dict[chunk_dict_id].occurrence_num);
                         return;
                     }
                     if dict_chunk.chunk[char_index] != chunk[char_index] {
@@ -69,13 +74,14 @@ impl Analyser {
         }
         self.dict.push(DictRecord {
             chunk,
-            num: 1,
+            occurrence_num: 1,
             size: str_size,
         })
     }
 
     pub fn deduplicate(&mut self, file_in: &str, file_out: &str) {
         self.simple_dedup(file_in);
+        self.throw_chunks_to_maker();
         self.fbc_dedup();
         self.reduplicate(file_out);
     }
@@ -184,7 +190,7 @@ impl Analyser {
     fn simple_dedup(&mut self, f_in: &str) {
         let contents = fs::read_to_string(f_in).expect("Should have been able to read the file");
         let input_length = contents.len();
-        let chars: Vec<char> = contents.chars().collect();
+        let chars: Chunk = contents.chars().collect();
         let mut chunk_num = 0;
         for index_input in 0..input_length {
             if index_input % FIXED_CHUNKER_SIZE == 0 {
@@ -194,9 +200,16 @@ impl Analyser {
             }
             self.chunks[chunk_num - 1].push(chars[index_input]);
         }
-        for chunk_index in 0..self.chunks.len() { //dict
+    }
+
+    fn throw_chunks_to_maker(&mut self) {
+        for chunk_index in 0..self.chunks.len() {
             self.make_dict((self.chunks[chunk_index]).clone());
         }
-        self.dict = self.dict.drain(..).filter(|x| x.num > 1).collect();
+        self.dict = self
+            .dict
+            .drain(..)
+            .filter(|x| x.occurrence_num > 1)
+            .collect();
     }
 }
